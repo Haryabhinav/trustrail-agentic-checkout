@@ -3,11 +3,13 @@ from app.audit import log as audit_log
 
 
 def test_ucp_manifest_declares_checkout_capability(app_client):
+    # Full spec-shape assertions live in tests/test_mcp_route.py; this just keeps the
+    # cheap "does discovery work at all" smoke check next to the other discovery tests.
     resp = app_client.get("/.well-known/ucp")
     assert resp.status_code == 200
     body = resp.json()
-    assert "checkout" in body["capabilities"]
     assert body["catalog_url"] == "/catalog"
+    assert "dev.ucp.shopping.checkout" in body["ucp"]["capabilities"]
 
 
 def test_catalog_returns_seeded_products(app_client):

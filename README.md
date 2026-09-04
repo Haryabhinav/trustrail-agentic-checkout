@@ -47,6 +47,17 @@ npm install
 npm run dev
 ```
 
+## Two ways to buy
+
+- **Chat**: `POST /chat` — the embedded Gemini shopping agent.
+- **UCP/AP2 (external agents)**: `GET /.well-known/ucp` for discovery, then JSON-RPC calls to
+  `POST /mcp` (`search_catalog`, `create_checkout`, `complete_checkout`, ...) — Google's real
+  Universal Commerce Protocol + Agent Payments Protocol shape, so any UCP-speaking agent can
+  transact here without touching the chat UI at all.
+
+Both paths terminate in the same server-side pricing/mandate/order pipeline — neither an
+external caller nor the chat model can set a price or bypass the spend limit.
+
 ## Tests
 
 ```

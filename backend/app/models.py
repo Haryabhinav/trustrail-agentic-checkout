@@ -66,3 +66,21 @@ class ProcessedWebhookEvent(Base):
 
     razorpay_event_id = Column(String, primary_key=True)
     received_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class CartMandateRecord(Base):
+    """AP2 CartMandate: a merchant-issued, price-locked cart. Created by the UCP/MCP
+    `create_checkout` method, consumed exactly once by `complete_checkout`. The lock is
+    enforced by re-pricing from the canonical Product table at completion time and refusing
+    to proceed if the price has drifted — see app/ap2.py.
+    """
+    __tablename__ = "cart_mandates"
+
+    id = Column(String, primary_key=True)  # "chk_" + uuid hex
+    items_json = Column(String, nullable=False)  # raw [{product_id, qty}] the mandate covers
+    total_inr = Column(Integer, nullable=False)  # locked price at issuance
+    category = Column(String, nullable=False)
+    merchant_authorization = Column(String, nullable=False)  # mock signature — see app/ap2.py
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    status = Column(String, nullable=False, default="open")  # open | completed | expired | failed

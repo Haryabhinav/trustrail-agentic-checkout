@@ -20,6 +20,7 @@ export default defineConfig({
       "/webhooks": BACKEND_URL,
       "/mcp": BACKEND_URL,
       "/autopay": BACKEND_URL,
+      "/stats": BACKEND_URL,
     },
   },
 });

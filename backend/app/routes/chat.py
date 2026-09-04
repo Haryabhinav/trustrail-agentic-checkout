@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app import autopay
 from app.agent.gemini_client import GeminiClient
 from app.agent.loop import run_turn
-from app.checkout import propose_and_checkout
+from app.checkout import propose_and_autocharge, propose_and_checkout
 from app.db import get_db
 
 router = APIRouter()
@@ -46,13 +47,24 @@ class ChatResponse(BaseModel):
 
 def _make_propose_cart_handler(db: Session, session_id: str):
     def handler(items: list[dict]) -> dict:
-        result = propose_and_checkout(db, session_id=session_id, llm_proposed_items=items)
+        # If the buyer has already saved a card (via /autopay/setup + Checkout.js — see
+        # app/autopay.py), the agent completes the ENTIRE purchase itself: no checkout link,
+        # no further human interaction. Otherwise it falls back to the checkout-link flow.
+        # Either way the same pricing + mandate gate runs first — autopay changes how an
+        # allowed purchase is executed, never whether one is allowed.
+        if autopay.is_active(db):
+            result = propose_and_autocharge(db, session_id=session_id, llm_proposed_items=items)
+        else:
+            result = propose_and_checkout(db, session_id=session_id, llm_proposed_items=items)
+
         return {
             "allowed": result.allowed,
             "reason": result.reason,
             "canonical_total_inr": result.priced_cart.total_inr if result.priced_cart else None,
             "checkout_url": result.checkout_url,
             "order_id": result.order_id,
+            "charged_directly": result.charged_directly,
+            "payment_id": result.payment_id,
         }
 
     return handler

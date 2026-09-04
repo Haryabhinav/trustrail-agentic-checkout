@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import Base, SessionLocal, engine
-from app.routes import audit, chat, demo, mcp, ucp, webhooks
+from app.routes import audit, autopay, chat, demo, mcp, ucp, webhooks
 from app.seed import seed_if_empty
 
 
@@ -38,6 +38,7 @@ app.include_router(ucp.router)
 app.include_router(audit.router)
 app.include_router(demo.router)
 app.include_router(mcp.router)
+app.include_router(autopay.router)
 
 
 @app.get("/health")

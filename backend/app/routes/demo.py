@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import demo_state
-from app.checkout import propose_and_checkout
+from app import autopay, demo_state
+from app.checkout import propose_and_autocharge, propose_and_checkout
 from app.db import get_db
 
 router = APIRouter()
@@ -58,4 +58,39 @@ def simulate_injection(req: SimulateInjectionRequest, db: Session = Depends(get_
         "reason": result.reason,
         "canonical_total_inr": result.priced_cart.total_inr if result.priced_cart else None,
         "checkout_url": result.checkout_url,
+    }
+
+
+class AgentAutopayPurchaseRequest(BaseModel):
+    product_id: int = 1
+    qty: int = 1
+    session_id: str | None = None
+
+
+@router.post("/demo/agent-autopay-purchase")
+def agent_autopay_purchase(req: AgentAutopayPurchaseRequest, db: Session = Depends(get_db)):
+    """The 'agent completes payment end-to-end' demo path — a stand-in for an agent that has
+    decided, on its own, to buy something. No checkout link, no human click: if a card is
+    saved (see /autopay/setup), the purchase completes immediately via a direct tokenized
+    charge, gated by the same mandate check every other purchase path uses.
+    """
+    session_id = req.session_id or f"demo-autopay-{uuid.uuid4()}"
+
+    if not autopay.is_active(db):
+        return {"session_id": session_id, "allowed": False, "reason": "no active autopay token — call POST /autopay/setup first"}
+
+    result = propose_and_autocharge(
+        db,
+        session_id=session_id,
+        llm_proposed_items=[{"product_id": req.product_id, "qty": req.qty}],
+        llm_rationale="[demo] agent decided to purchase autonomously via saved payment token",
+    )
+    return {
+        "session_id": session_id,
+        "allowed": result.allowed,
+        "reason": result.reason,
+        "canonical_total_inr": result.priced_cart.total_inr if result.priced_cart else None,
+        "charged_directly": result.charged_directly,
+        "order_id": result.order_id,
+        "payment_id": result.payment_id,
     }

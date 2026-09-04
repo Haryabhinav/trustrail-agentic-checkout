@@ -6,10 +6,11 @@ Never called with, and never reads, any price/discount value the LLM produced.
 import hashlib
 import json
 import time
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from app import audit, demo_state, razorpay_client
+from app import audit, autopay, demo_state, razorpay_client
 from app.mandate import MandateState, check_mandate
 from app.models import IdempotencyKey, Mandate
 from app.pricing import InsufficientStockError, PricedCart, UnknownProductError, price_cart
@@ -47,24 +48,38 @@ def get_mandate_state(db: Session) -> Mandate:
 class CheckoutResult:
     def __init__(self, *, allowed: bool, reason: str, priced_cart: PricedCart | None = None,
                  checkout_url: str | None = None, order_id: str | None = None,
-                 llm_said: dict | None = None):
+                 llm_said: dict | None = None, payment_id: str | None = None,
+                 charged_directly: bool = False):
         self.allowed = allowed
         self.reason = reason
         self.priced_cart = priced_cart
         self.checkout_url = checkout_url
         self.order_id = order_id
         self.llm_said = llm_said
+        self.payment_id = payment_id
+        # True when this purchase was completed by app.autopay.charge_via_token — no
+        # checkout link was ever generated because no human interaction was needed.
+        self.charged_directly = charged_directly
 
 
-def propose_and_checkout(
+@dataclass
+class _GateResult:
+    priced_cart: PricedCart | None
+    llm_said: dict
+    early_exit: CheckoutResult | None  # set when the caller should return this immediately
+
+
+def _reprice_and_gate(
     db: Session,
     *,
     session_id: str,
     llm_proposed_items: list[dict],
-    llm_rationale: str | None = None,
-    sleep_fn=time.sleep,
-) -> CheckoutResult:
-    """Full server-side pipeline: reprice -> mandate check -> audit -> order -> payment link.
+    llm_rationale: str | None,
+) -> _GateResult:
+    """Shared by propose_and_checkout and propose_and_autocharge: reprice from the canonical
+    Product table, detect/reject hallucinated price or discount fields, and run the spend/
+    category mandate gate. Both callers diverge only in HOW they execute an allowed purchase
+    (checkout link vs. a silent tokenized charge) — never in whether one is allowed.
 
     llm_proposed_items are raw tool-call args from the model: [{"product_id", "qty",
     ...anything else, including a hallucinated "price" or "discount" field}]. Any field other
@@ -98,7 +113,7 @@ def propose_and_checkout(
             llm_said=llm_said,
             mandate_check_result="fail",
         )
-        return CheckoutResult(allowed=False, reason=str(exc), llm_said=llm_said)
+        return _GateResult(None, llm_said, CheckoutResult(allowed=False, reason=str(exc), llm_said=llm_said))
 
     # A "discount" field is treated as a semantic manipulation attempt (prompt injection /
     # jailbreak), not an innocent hallucination — it is never applied, and gets its own event
@@ -148,7 +163,26 @@ def propose_and_checkout(
     )
 
     if not allowed:
-        return CheckoutResult(allowed=False, reason=reason, priced_cart=priced_cart, llm_said=llm_said)
+        return _GateResult(
+            priced_cart, llm_said, CheckoutResult(allowed=False, reason=reason, priced_cart=priced_cart, llm_said=llm_said)
+        )
+
+    return _GateResult(priced_cart, llm_said, None)
+
+
+def propose_and_checkout(
+    db: Session,
+    *,
+    session_id: str,
+    llm_proposed_items: list[dict],
+    llm_rationale: str | None = None,
+    sleep_fn=time.sleep,
+) -> CheckoutResult:
+    """Full server-side pipeline: reprice -> mandate check -> audit -> order -> payment link."""
+    gate = _reprice_and_gate(db, session_id=session_id, llm_proposed_items=llm_proposed_items, llm_rationale=llm_rationale)
+    if gate.early_exit is not None:
+        return gate.early_exit
+    priced_cart, llm_said = gate.priced_cart, gate.llm_said
 
     idempotency_key = compute_idempotency_key(session_id, priced_cart)
 
@@ -242,5 +276,58 @@ def propose_and_checkout(
         priced_cart=priced_cart,
         checkout_url=link.get("short_url"),
         order_id=order["id"],
+        llm_said=llm_said,
+    )
+
+
+def propose_and_autocharge(
+    db: Session,
+    *,
+    session_id: str,
+    llm_proposed_items: list[dict],
+    llm_rationale: str | None = None,
+) -> CheckoutResult:
+    """The zero-human-interaction path: reprice -> mandate check -> audit -> silent tokenized
+    charge via app.autopay. No checkout link is ever generated — there is nothing for a human
+    to click, because there's a previously-authorized saved card to charge directly.
+
+    Callers (routes/chat.py, routes/demo.py) are responsible for checking
+    app.autopay.is_active(db) first and choosing this over propose_and_checkout — this
+    function does not fall back to a checkout link if no token is active, it fails closed.
+    """
+    gate = _reprice_and_gate(db, session_id=session_id, llm_proposed_items=llm_proposed_items, llm_rationale=llm_rationale)
+    if gate.early_exit is not None:
+        return gate.early_exit
+    priced_cart, llm_said = gate.priced_cart, gate.llm_said
+
+    pending_row = audit.log(
+        db,
+        session_id=session_id,
+        event_type="autopay_charge",
+        status="pending",
+        llm_rationale=llm_rationale,
+        llm_said=llm_said,
+        server_used={"total_inr": priced_cart.total_inr, "items": priced_cart.items},
+        canonical_price_inr=priced_cart.total_inr,
+        mandate_check_result="pass",
+    )
+
+    try:
+        charge = autopay.charge_via_token(
+            db, amount_inr=priced_cart.total_inr, description=f"TrustRail autopay charge ({session_id})"
+        )
+    except autopay.AutopayError as exc:
+        audit.update_status(db, pending_row, status="error")
+        return CheckoutResult(allowed=True, reason=f"autopay charge failed: {exc}", priced_cart=priced_cart, llm_said=llm_said)
+
+    audit.update_status(db, pending_row, status="ok", razorpay_order_id=charge["order_id"])
+
+    return CheckoutResult(
+        allowed=True,
+        reason="charged automatically via saved payment method — no human interaction required",
+        priced_cart=priced_cart,
+        order_id=charge["order_id"],
+        payment_id=charge["payment_id"],
+        charged_directly=True,
         llm_said=llm_said,
     )

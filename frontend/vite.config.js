@@ -18,6 +18,8 @@ export default defineConfig({
       "/demo": BACKEND_URL,
       "/health": BACKEND_URL,
       "/webhooks": BACKEND_URL,
+      "/mcp": BACKEND_URL,
+      "/autopay": BACKEND_URL,
     },
   },
 });

@@ -22,3 +22,28 @@ def test_stats_counts_successful_orders_and_blocked_events(app_client, db_sessio
     body = resp.json()
     assert body["orders_count"] == 2
     assert body["blocked_count"] == 1
+
+
+def test_stats_audit_counts_use_a_single_query(app_client, db_session):
+    # Regression test: orders_count and blocked_count used to be two separate COUNT(*)
+    # queries against audit_log; they're now one query with conditional aggregation. This
+    # endpoint is polled every 2s by the frontend, so the round-trip count matters.
+    from sqlalchemy import event
+
+    audit_log(db_session, session_id="a", event_type="order_created", status="ok")
+    audit_log(db_session, session_id="a", event_type="rejected_injection", status="blocked")
+
+    engine = db_session.get_bind()
+    queries = []
+
+    def _capture(conn, cursor, statement, parameters, context, executemany):
+        if "audit_log" in statement.lower() and "select" in statement.lower():
+            queries.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _capture)
+    try:
+        app_client.get("/stats")
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture)
+
+    assert len(queries) == 1, f"expected exactly 1 audit_log query for stats, got {len(queries)}"

@@ -1,14 +1,7 @@
-"""MCP (Model Context Protocol) JSON-RPC 2.0 transport for UCP's shopping capabilities.
-
-This is what `/.well-known/ucp` advertises as `services: [{transport: "mcp", endpoint: "/mcp"}]`
-— an external AI buyer (or another agent framework) talks to this endpoint directly, with
-zero involvement from this merchant's own chat agent (app/agent/). That's the literal
-"enables AI-to-AI transactions" requirement: two completely independent code paths
-(chat agent vs. external MCP caller) both terminate at the same disposal boundary
-(app.checkout.propose_and_checkout), never at a second, weaker one.
-
-Methods implemented, matching UCP's `dev.ucp.shopping` capability namespace:
-  search_catalog, lookup_catalog, create_checkout, get_checkout, complete_checkout
+"""MCP (Model Context Protocol) JSON-RPC 2.0 transport for UCP's shopping capabilities —
+what /.well-known/ucp advertises as its `dev.ucp.shopping` endpoint. Lets an external agent
+transact without touching the chat agent; both paths terminate at the same disposal boundary
+in app.checkout.
 """
 import json
 

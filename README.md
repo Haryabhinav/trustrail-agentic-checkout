@@ -20,6 +20,9 @@ Fill in `.env`:
 - `GEMINI_API_KEY` — required for the chat agent
 - `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` — required for real order/checkout creation
 - `RAZORPAY_WEBHOOK_SECRET` — only needed if you're capturing `payment.captured` webhooks (requires a webhook registered against a publicly reachable URL, e.g. via a tunnel)
+- `ALLOWED_ORIGINS` — comma-separated frontend origins allowed to call the API (defaults to `http://localhost:5173`). This app has no user login by design, so a wildcard here would let any website's JS trigger money-moving endpoints from a merchant's browser session — restrict it to real origins for anything beyond local use.
+- `ENABLE_DEMO_ROUTES` — set to `false` to not mount `/demo/*` at all. Those endpoints exist purely to make the demo scenarios below repeatable on cue; they can move real money or flip shared process state with a single unauthenticated request, so a real deployment should disable them.
+- `AP2_MOCK_SIGNING_SECRET` — set a real random value for anything beyond local demo use (see `.env.example` for why).
 
 ## Run with Docker
 

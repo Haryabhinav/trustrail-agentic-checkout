@@ -24,6 +24,26 @@ def test_mcp_route_missing_method_returns_invalid_request(app_client):
     assert resp.json()["error"]["code"] == -32600
 
 
+def test_mcp_route_non_rpc_error_still_returns_jsonrpc_envelope_not_raw_500(app_client, monkeypatch):
+    # A failure that ISN'T an mcp.RpcError (e.g. a DB/programming error inside a method
+    # handler) used to propagate as a raw HTTP 500, breaking the JSON-RPC protocol contract
+    # every other error path honors.
+    from app import mcp as mcp_module
+
+    def _boom(db, params):
+        raise RuntimeError("simulated unexpected failure")
+
+    monkeypatch.setattr(mcp_module, "_method_search_catalog", _boom)
+    monkeypatch.setitem(mcp_module._METHODS, "search_catalog", _boom)
+
+    resp = app_client.post("/mcp", json={"jsonrpc": "2.0", "id": 5, "method": "search_catalog", "params": {"query": "x"}})
+    assert resp.status_code == 200  # never a raw 500
+    body = resp.json()
+    assert body["jsonrpc"] == "2.0"
+    assert body["id"] == 5
+    assert body["error"]["code"] == -32603
+
+
 def test_mcp_route_malformed_json_returns_parse_error(app_client):
     resp = app_client.post("/mcp", content=b"{not valid json", headers={"Content-Type": "application/json"})
     assert resp.status_code == 200

@@ -6,10 +6,20 @@ import hashlib
 import hmac
 
 import razorpay
+import requests
 
 from app import config
 
 _client: razorpay.Client | None = None
+
+
+class _TimeoutSession(requests.Session):
+    """Applies a default request timeout, since requests.Session has none and the razorpay
+    SDK's own call sites don't pass one."""
+
+    def request(self, *args, **kwargs):
+        kwargs.setdefault("timeout", config.UPSTREAM_REQUEST_TIMEOUT_SECONDS)
+        return super().request(*args, **kwargs)
 
 
 def get_client() -> razorpay.Client:
@@ -19,13 +29,12 @@ def get_client() -> razorpay.Client:
             raise RuntimeError(
                 "RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET are not set — cannot call Razorpay."
             )
-        _client = razorpay.Client(auth=(config.RAZORPAY_KEY_ID, config.RAZORPAY_KEY_SECRET))
+        _client = razorpay.Client(auth=(config.RAZORPAY_KEY_ID, config.RAZORPAY_KEY_SECRET), session=_TimeoutSession())
     return _client
 
 
 def create_order(amount_paise: int, currency: str, receipt: str) -> dict:
-    """receipt should be the idempotency key — Razorpay dedupes orders by receipt per docs
-    recommendation, and we additionally dedupe ourselves via IdempotencyKey table."""
+    """receipt should be the idempotency key."""
     client = get_client()
     return client.order.create(
         {
@@ -56,8 +65,7 @@ def verify_webhook_signature(raw_body: bytes, signature_header: str, secret: str
     return hmac.compare_digest(expected, signature_header)
 
 
-# --- Autopay (tokenized recurring charge) ---------------------------------------------
-# See app/autopay.py for the full flow and why a human authenticates exactly once.
+# --- Autopay (tokenized recurring charge) — see app/autopay.py ---
 
 def create_customer(name: str, email: str, contact: str) -> dict:
     client = get_client()
@@ -65,9 +73,8 @@ def create_customer(name: str, email: str, contact: str) -> dict:
 
 
 def create_authorization_order(amount_paise: int, customer_id: str, max_amount_paise: int, expire_at: int) -> dict:
-    """The one order a human completes via Checkout.js to save their card as a token.
-    `token.max_amount` caps what any single subsequent silent charge can ever be for — a
-    second, Razorpay-enforced ceiling independent of our own app.mandate spend gate."""
+    """The order a human completes via Checkout.js to save their card as a token.
+    token.max_amount is a Razorpay-enforced ceiling on any later silent charge."""
     client = get_client()
     return client.order.create(
         {
@@ -81,8 +88,7 @@ def create_authorization_order(amount_paise: int, customer_id: str, max_amount_p
 
 
 def verify_checkout_signature(order_id: str, payment_id: str, signature: str) -> bool:
-    """Same HMAC-SHA256 construction Razorpay's Checkout.js docs specify for verifying the
-    payment handler callback: hmac(order_id + '|' + payment_id, key_secret)."""
+    """hmac(order_id + '|' + payment_id, key_secret) — per Razorpay's Checkout.js docs."""
     if not signature:
         return False
     message = f"{order_id}|{payment_id}".encode()
@@ -96,8 +102,7 @@ def fetch_payment(payment_id: str) -> dict:
 
 
 def charge_recurring(*, customer_id: str, token_id: str, order_id: str, amount_paise: int, email: str, contact: str) -> dict:
-    """The zero-human-interaction charge: POST /v1/payments/create/recurring. No checkout
-    page, no OTP, no link — this is what an agent calls to complete a purchase on its own."""
+    """POST /v1/payments/create/recurring — the zero-human-interaction charge."""
     client = get_client()
     return client.payment.createRecurring(
         {

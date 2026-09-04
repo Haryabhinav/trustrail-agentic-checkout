@@ -1,8 +1,4 @@
-"""The disposal boundary. This is the ONLY place cart items become a Razorpay order.
-
-Called from routes/chat.py (propose_cart tool) and routes/demo.py (failure demo).
-Never called with, and never reads, any price/discount value the LLM produced.
-"""
+"""The disposal boundary — the only place cart items become a Razorpay order."""
 import hashlib
 import json
 import time
@@ -15,15 +11,11 @@ from app.mandate import MandateState, check_mandate
 from app.models import IdempotencyKey, Mandate
 from app.pricing import InsufficientStockError, PricedCart, UnknownProductError, price_cart
 
-# Compressed retry ladder for the live demo. Real backoff would be 0s / 60s / 120s / 300s;
-# we label the compression explicitly on screen per the README demo script.
+# Compressed retry ladder for the demo; real backoff would be 0s/60s/120s/300s.
 RETRY_DELAYS_SECONDS = [0, 1, 2, 3]
 
-# Razorpay's `receipt` (and reference_id) fields reject anything longer than ~40-56 chars
-# depending on the field (confirmed live: order.create rejected a 64-char sha256 receipt with
-# "the length must be no more than 56"). Our internal idempotency_key stays a full sha256
-# hexdigest everywhere else (DB, audit trail) for collision safety; only the value handed to
-# Razorpay itself is truncated.
+# Razorpay rejects receipt/reference_id values over ~40-56 chars; our internal key stays a
+# full sha256 hexdigest everywhere else (DB, audit trail), only truncated here.
 RAZORPAY_RECEIPT_MAX_LEN = 40
 
 
@@ -57,9 +49,7 @@ class CheckoutResult:
         self.order_id = order_id
         self.llm_said = llm_said
         self.payment_id = payment_id
-        # True when this purchase was completed by app.autopay.charge_via_token — no
-        # checkout link was ever generated because no human interaction was needed.
-        self.charged_directly = charged_directly
+        self.charged_directly = charged_directly  # True if charged via a saved token, no link
 
 
 @dataclass
@@ -76,24 +66,14 @@ def _reprice_and_gate(
     llm_proposed_items: list[dict],
     llm_rationale: str | None,
 ) -> _GateResult:
-    """Shared by propose_and_checkout and propose_and_autocharge: reprice from the canonical
-    Product table, detect/reject hallucinated price or discount fields, and run the spend/
-    category mandate gate. Both callers diverge only in HOW they execute an allowed purchase
-    (checkout link vs. a silent tokenized charge) — never in whether one is allowed.
-
-    llm_proposed_items are raw tool-call args from the model: [{"product_id", "qty",
-    ...anything else, including a hallucinated "price" or "discount" field}]. Any field other
-    than product_id/qty is discarded here and never reaches pricing.py's signature.
-    """
+    """Shared by propose_and_checkout and propose_and_autocharge: reprice, detect/reject
+    hallucinated price/discount fields, and run the mandate gate. Callers differ only in how
+    an allowed purchase executes, never in whether it's allowed."""
     llm_said = {"items": llm_proposed_items}
     discount_fields = [item for item in llm_proposed_items if "discount" in item]
     price_fields = [item for item in llm_proposed_items if "price" in item and "discount" not in item]
 
     try:
-        # A malformed/hallucinated tool call missing product_id is a data-shape error, not a
-        # crash — it must land in the same "reported back to the model" path as an unknown
-        # product id or bad quantity, so the .get() + explicit check happens inside this
-        # try block rather than before it.
         clean_items = []
         for item in llm_proposed_items:
             if "product_id" not in item:
@@ -101,9 +81,6 @@ def _reprice_and_gate(
             clean_items.append({"product_id": item["product_id"], "qty": item.get("qty", 1)})
         priced_cart = price_cart(db, clean_items)
     except (UnknownProductError, InsufficientStockError, ValueError) as exc:
-        # A hallucinated product_id, an impossible quantity, or an out-of-stock request is
-        # treated the same way as a failed mandate check: reported back to the model as a
-        # tool result (so it can explain to the user), never raised as an unhandled 500.
         audit.log(
             db,
             session_id=session_id,
@@ -115,10 +92,8 @@ def _reprice_and_gate(
         )
         return _GateResult(None, llm_said, CheckoutResult(allowed=False, reason=str(exc), llm_said=llm_said))
 
-    # A "discount" field is treated as a semantic manipulation attempt (prompt injection /
-    # jailbreak), not an innocent hallucination — it is never applied, and gets its own event
-    # type so the dashboard can show it as a distinct, named block rather than folding it into
-    # ordinary price correction noise.
+    # A "discount" field is treated as a manipulation attempt, not a hallucination — never
+    # applied, and gets its own event type on the audit trail.
     if discount_fields:
         audit.log(
             db,
@@ -178,7 +153,7 @@ def propose_and_checkout(
     llm_rationale: str | None = None,
     sleep_fn=time.sleep,
 ) -> CheckoutResult:
-    """Full server-side pipeline: reprice -> mandate check -> audit -> order -> payment link."""
+    """reprice -> mandate check -> audit -> order -> payment link."""
     gate = _reprice_and_gate(db, session_id=session_id, llm_proposed_items=llm_proposed_items, llm_rationale=llm_rationale)
     if gate.early_exit is not None:
         return gate.early_exit
@@ -223,7 +198,7 @@ def propose_and_checkout(
             )
             last_error = None
             break
-        except Exception as exc:  # noqa: BLE001 - deliberately broad: any gateway failure retries the same way
+        except Exception as exc:  # noqa: BLE001 - any gateway failure retries the same way
             last_error = exc
             audit.log(
                 db,
@@ -244,10 +219,8 @@ def propose_and_checkout(
             llm_said=llm_said,
         )
 
-    # Record the order and its idempotency key as soon as it exists at Razorpay, before
-    # attempting create_payment_link — so a failure in the next call can never leave an
-    # order that exists at Razorpay with no trace of it in our own audit trail or
-    # IdempotencyKey table (which would also risk a duplicate order on a naive retry).
+    # Record before attempting the payment link, so a link failure can't leave an order with
+    # no trace in our audit trail or IdempotencyKey table.
     db.add(IdempotencyKey(key=idempotency_key, razorpay_order_id=order["id"]))
     audit.update_status(db, pending_row, status="pending", razorpay_order_id=order["id"])
     db.commit()
@@ -287,14 +260,9 @@ def propose_and_autocharge(
     llm_proposed_items: list[dict],
     llm_rationale: str | None = None,
 ) -> CheckoutResult:
-    """The zero-human-interaction path: reprice -> mandate check -> audit -> silent tokenized
-    charge via app.autopay. No checkout link is ever generated — there is nothing for a human
-    to click, because there's a previously-authorized saved card to charge directly.
-
-    Callers (routes/chat.py, routes/demo.py) are responsible for checking
-    app.autopay.is_active(db) first and choosing this over propose_and_checkout — this
-    function does not fall back to a checkout link if no token is active, it fails closed.
-    """
+    """Zero-human-interaction path: reprice -> mandate check -> audit -> silent tokenized
+    charge. Fails closed if no autopay token is active — callers must check
+    app.autopay.is_active(db) first."""
     gate = _reprice_and_gate(db, session_id=session_id, llm_proposed_items=llm_proposed_items, llm_rationale=llm_rationale)
     if gate.early_exit is not None:
         return gate.early_exit

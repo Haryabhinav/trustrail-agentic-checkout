@@ -1,7 +1,5 @@
-"""Explicit, on-screen failure-injection endpoints for the live demo. Not hidden behind
-any flag other than being called deliberately — this route file's existence is itself part
-of the "graceful failure, shown on purpose" story.
-"""
+"""Failure-injection endpoints for the live demo. Gate behind ENABLE_DEMO_ROUTES=false in
+production — see config.py."""
 import uuid
 
 from fastapi import APIRouter, Depends
@@ -38,13 +36,8 @@ class SimulateInjectionRequest(BaseModel):
 
 @router.post("/demo/simulate-injection")
 def simulate_injection(req: SimulateInjectionRequest, db: Session = Depends(get_db)):
-    """Deterministically exercises the real disposal-boundary code (app.checkout) with a
-    hallucinated `discount` field, exactly as a jailbroken/misbehaving Gemini tool call would
-    send it. This is NOT a mock — it's the same propose_and_checkout() path routes/chat.py
-    calls; only the input is synthetic, because a well-behaved model (correctly) declines to
-    emit this at the conversational layer, which is not something a live demo should depend
-    on to be repeatable.
-    """
+    """Runs the real propose_and_checkout path with a hallucinated `discount` field — not a
+    mock, just a deterministic stand-in since a well-behaved model won't emit this itself."""
     session_id = req.session_id or f"demo-injection-{uuid.uuid4()}"
     result = propose_and_checkout(
         db,
@@ -69,11 +62,7 @@ class AgentAutopayPurchaseRequest(BaseModel):
 
 @router.post("/demo/agent-autopay-purchase")
 def agent_autopay_purchase(req: AgentAutopayPurchaseRequest, db: Session = Depends(get_db)):
-    """The 'agent completes payment end-to-end' demo path — a stand-in for an agent that has
-    decided, on its own, to buy something. No checkout link, no human click: if a card is
-    saved (see /autopay/setup), the purchase completes immediately via a direct tokenized
-    charge, gated by the same mandate check every other purchase path uses.
-    """
+    """Stand-in for an agent deciding, on its own, to buy something via a saved card."""
     session_id = req.session_id or f"demo-autopay-{uuid.uuid4()}"
 
     if not autopay.is_active(db):

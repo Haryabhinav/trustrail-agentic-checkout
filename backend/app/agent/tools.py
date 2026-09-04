@@ -1,10 +1,7 @@
-"""Gemini tool schemas + read-only tool implementations.
-
-Structural guarantee: this module and everything else under app/agent/ never imports
-app.razorpay_client or app.checkout. propose_cart's actual disposal logic (pricing, mandate
-check, order creation) lives in app.checkout and is invoked by routes/chat.py via a callback
-passed into the agent loop — never called from inside this package. This is enforced by
-tests/test_disposal_boundary.py via both an import-graph check and a tool-schema check.
+"""Gemini tool schemas + read-only tool implementations. Nothing under app/agent/ imports
+app.razorpay_client or app.checkout — propose_cart's actual disposal logic lives in
+app.checkout, invoked via a callback from routes/chat.py. Enforced by
+tests/test_disposal_boundary.py.
 """
 from sqlalchemy.orm import Session
 
@@ -55,8 +52,7 @@ TOOL_SCHEMAS = [
     },
 ]
 
-# Names that would imply money movement — the disposal-boundary test asserts none of these,
-# or any tool with "create_order"/"capture"/"charge" in its name, ever appear in TOOL_SCHEMAS.
+# Checked by the disposal-boundary test: none of these may appear in a TOOL_SCHEMAS name.
 FORBIDDEN_TOOL_NAME_FRAGMENTS = ["create_order", "capture", "charge", "pay", "refund", "transfer"]
 
 

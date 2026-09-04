@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -6,6 +8,7 @@ from app import autopay
 from app.db import get_db
 
 router = APIRouter()
+logger = logging.getLogger("trustrail.autopay")
 
 
 class SetupRequest(BaseModel):
@@ -24,7 +27,11 @@ class ConfirmRequest(BaseModel):
 def setup(req: SetupRequest, db: Session = Depends(get_db)):
     """Returns what the frontend needs to open Razorpay Checkout.js for the one, human-
     authenticated authorization payment that tokenizes the card."""
-    return autopay.setup_authorization(db, name=req.name, email=req.email, contact=req.contact)
+    try:
+        return autopay.setup_authorization(db, name=req.name, email=req.email, contact=req.contact)
+    except Exception as exc:  # noqa: BLE001 - clean error instead of a raw 500
+        logger.exception("autopay setup_authorization failed")
+        raise HTTPException(status_code=502, detail=f"could not start autopay setup: {exc}")
 
 
 @router.post("/autopay/confirm")
@@ -40,6 +47,9 @@ def confirm(req: ConfirmRequest, db: Session = Depends(get_db)):
         )}
     except autopay.AutopayError as exc:
         return {"ok": False, "error": str(exc)}
+    except Exception as exc:  # noqa: BLE001 - e.g. a Razorpay fetch_payment API failure
+        logger.exception("autopay confirm_authorization failed")
+        return {"ok": False, "error": f"could not confirm autopay setup: {exc}"}
 
 
 @router.get("/autopay/status")

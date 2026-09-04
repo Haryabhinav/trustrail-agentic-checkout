@@ -1,18 +1,8 @@
-"""Tokenized recurring charge: the actual "agent completes payment with zero human
-interaction" capability, as opposed to the checkout-link flow in app.checkout (which still
-needs a human to enter card details and an OTP for that specific purchase).
-
-Why a human is still involved once: RBI mandates a second authentication factor (typically
-OTP) for a card's *first* transaction with a merchant, and PCI-DSS forbids us from ever
-storing a raw card number — so a card can only become chargeable-by-agent after Razorpay
-tokenizes it during one human-authenticated payment via Checkout.js. This is not a corner cut;
-it's how every legitimate recurring-payments product works (subscriptions, saved cards on any
-app store, UPI Autopay), and it's also the model Google's own AP2 spec assumes underneath its
-mandate layer.
-
-After that one-time save: `charge_via_token` moves money with no checkout page, no link, no
-OTP — gated only by the same app.mandate.check_mandate spend/category check every other
-purchase path in this app goes through.
+"""Tokenized recurring charge: an agent-initiated purchase with zero human interaction, once
+a card is saved. RBI requires a second auth factor on a card's first transaction, so one
+human-authenticated Checkout.js payment is unavoidable to tokenize the card; every charge
+after that goes through charge_via_token with no checkout page, no OTP — gated by the same
+app.mandate.check_mandate spend/category check as every other purchase path.
 """
 import time
 

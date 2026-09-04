@@ -1,11 +1,6 @@
-"""Tool-use conversation loop. Depends only on the normalized client interface
-(send_message / send_function_results returning {"text", "function_calls"}) — never on
-google-generativeai's SDK types directly, and never on app.checkout / app.razorpay_client.
-
-propose_cart is dispatched to a caller-supplied callback (propose_cart_handler), not resolved
-inside this package — that is the structural half of the disposal-boundary guarantee.
-See tests/test_disposal_boundary.py.
-"""
+"""Tool-use conversation loop. propose_cart is dispatched to a caller-supplied callback, not
+resolved here — the structural half of the disposal-boundary guarantee (see
+tests/test_disposal_boundary.py)."""
 from typing import Callable, Protocol
 
 from sqlalchemy.orm import Session

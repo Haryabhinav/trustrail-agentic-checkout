@@ -1,8 +1,5 @@
-"""In-memory fault injection for the live failure-recovery demo.
-
-Deliberately process-local, non-persistent state — this is a demo control knob, not
-production config. Reset on restart, which is exactly what you want between demo runs.
-"""
+"""In-memory fault injection for the failure-recovery demo. Process-local, resets on restart
+by design."""
 import threading
 
 _lock = threading.Lock()

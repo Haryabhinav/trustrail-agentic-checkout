@@ -1,9 +1,5 @@
-"""Real Gemini SDK adapter. Isolated in its own module so app/agent/loop.py's orchestration
-logic can be unit-tested with a fake client and zero network/SDK dependency.
-
-Exposes a small normalized interface (send_message / send_function_results, returning plain
-dicts) so loop.py never touches google-generativeai's protobuf types directly.
-"""
+"""Real Gemini SDK adapter, isolated so loop.py can be tested without the SDK. Exposes a
+normalized interface (plain dicts) so loop.py never touches protobuf types directly."""
 import google.generativeai as genai
 
 from app import config
@@ -23,9 +19,8 @@ def _ensure_configured() -> None:
 
 
 def _to_plain(value):
-    """Recursively convert protobuf MapComposite/RepeatedComposite (what `part.function_call.args`
-    actually contains for nested fields, e.g. propose_cart's `items` list) into plain
-    dict/list/scalar so json.dumps in app/audit.py doesn't blow up on a real tool call."""
+    """Converts protobuf MapComposite/RepeatedComposite to plain dict/list so json.dumps in
+    app/audit.py doesn't blow up on a real tool call."""
     if hasattr(value, "items"):
         return {k: _to_plain(v) for k, v in value.items()}
     if hasattr(value, "__iter__") and not isinstance(value, (str, bytes)):
@@ -47,10 +42,8 @@ def _normalize(response) -> dict:
 
 
 class GeminiClient:
-    """Chat-session wrapper. One instance of `chat` per HTTP /chat request in this app.
-    Session history itself is kept process-local and in-memory by the caller
-    (routes/chat.py's _SESSION_HISTORY dict, keyed by session_id) — a deliberate demo-scope
-    simplification, not round-tripped through the HTTP request/response body."""
+    """Chat-session wrapper; history is kept in-memory by routes/chat.py, not round-tripped
+    over HTTP."""
 
     def __init__(self):
         _ensure_configured()
@@ -64,7 +57,9 @@ class GeminiClient:
         return self._model.start_chat(history=history or [])
 
     def send_message(self, chat, message: str) -> dict:
-        return _normalize(chat.send_message(message))
+        return _normalize(
+            chat.send_message(message, request_options={"timeout": config.UPSTREAM_REQUEST_TIMEOUT_SECONDS})
+        )
 
     def send_function_results(self, chat, results: list[dict]) -> dict:
         """results: [{"name": str, "response": dict}]"""
@@ -74,4 +69,9 @@ class GeminiClient:
             )
             for r in results
         ]
-        return _normalize(chat.send_message(genai.protos.Content(parts=parts)))
+        return _normalize(
+            chat.send_message(
+                genai.protos.Content(parts=parts),
+                request_options={"timeout": config.UPSTREAM_REQUEST_TIMEOUT_SECONDS},
+            )
+        )

@@ -69,16 +69,8 @@ class ProcessedWebhookEvent(Base):
 
 
 class SavedPaymentToken(Base):
-    """A tokenized card, saved via one human-authenticated Razorpay Checkout.js payment
-    (RBI's mandatory 2-factor authentication cannot be skipped for that first payment — see
-    app/autopay.py's module docstring). Every purchase after that can be charged directly by
-    the agent, with zero human interaction, via Razorpay's recurring-payments API — gated by
-    the exact same app.mandate.check_mandate spend/category check as every other purchase
-    path in this app.
-
-    Single row (id=1), matching the single-Mandate-row pattern elsewhere — this demo has one
-    "buyer," not a multi-tenant customer base.
-    """
+    """A tokenized card — see app/autopay.py. Single row (id=1), one buyer, no multi-tenant
+    customer base."""
     __tablename__ = "saved_payment_tokens"
 
     id = Column(Integer, primary_key=True)  # single row, id=1
@@ -93,11 +85,8 @@ class SavedPaymentToken(Base):
 
 
 class CartMandateRecord(Base):
-    """AP2 CartMandate: a merchant-issued, price-locked cart. Created by the UCP/MCP
-    `create_checkout` method, consumed exactly once by `complete_checkout`. The lock is
-    enforced by re-pricing from the canonical Product table at completion time and refusing
-    to proceed if the price has drifted — see app/ap2.py.
-    """
+    """AP2 CartMandate: a price-locked cart, consumed once by complete_checkout — see
+    app/ap2.py."""
     __tablename__ = "cart_mandates"
 
     id = Column(String, primary_key=True)  # "chk_" + uuid hex

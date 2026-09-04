@@ -30,9 +30,7 @@ def price_cart(db: Session, items: list[dict]) -> PricedCart:
     if not items:
         raise ValueError("cart is empty")
 
-    # Validate quantities and collect ids up front, then fetch every referenced product in a
-    # single query (WHERE id IN (...)) instead of one round trip per line item — an N-item
-    # cart used to cost N sequential queries; it now costs exactly one, regardless of N.
+    # Batch-fetch in one query instead of one round trip per line item.
     product_ids: set[int] = set()
     for raw in items:
         qty = int(raw.get("qty", 1))
@@ -72,9 +70,7 @@ def price_cart(db: Session, items: list[dict]) -> PricedCart:
             }
         )
 
-    # Mandate categories are checked per dominant category; a mixed-category cart is priced
-    # correctly either way but is deliberately rejected at the mandate step for auditability —
-    # see mandate.py callers. We report "mixed" here so that rejection reason is legible.
+    # Mixed-category carts are rejected at the mandate step, not here — see mandate.py.
     category = categories.pop() if len(categories) == 1 else "mixed"
 
     return PricedCart(items=priced_items, total_inr=total, category=category)

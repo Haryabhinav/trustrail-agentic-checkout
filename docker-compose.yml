@@ -12,6 +12,15 @@ services:
       MANDATE_MAX_SPEND_INR: ${MANDATE_MAX_SPEND_INR:-5000}
       MANDATE_ALLOWED_CATEGORIES: ${MANDATE_ALLOWED_CATEGORIES:-electronics,groceries,office-supplies}
       DATABASE_URL: sqlite:////data/trustrail.db
+      # Defaults to the same publicly-known demo value config.py itself falls back to —
+      # deliberately NOT an empty string here, since an unset compose var would otherwise
+      # override config.py's real default with "" (a worse, empty secret). Anyone reading
+      # the source can forge a CartMandate signature against this default either way; set a
+      # real value in .env for anything beyond local demo use.
+      AP2_MOCK_SIGNING_SECRET: ${AP2_MOCK_SIGNING_SECRET:-trustrail-demo-mock-signing-secret}
+      UCP_MERCHANT_NAME: ${UCP_MERCHANT_NAME:-TrustRail Demo Store}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      ENABLE_DEMO_ROUTES: ${ENABLE_DEMO_ROUTES:-true}
     volumes:
       - trustrail_db:/data
     healthcheck:
@@ -29,6 +38,11 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5173/', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 volumes:
   trustrail_db:

@@ -70,6 +70,36 @@ def test_agent_autopay_purchase_without_setup_is_refused(app_client):
     assert "no active autopay token" in body["reason"]
 
 
+def test_setup_failure_returns_clean_502_not_raw_500(app_client, monkeypatch):
+    def _boom(name, email, contact):
+        raise RuntimeError("RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET are not set")
+
+    monkeypatch.setattr(razorpay_client, "create_customer", _boom)
+
+    resp = app_client.post("/autopay/setup", json={"name": "T", "email": "t@example.com", "contact": "9812345670"})
+    assert resp.status_code == 502
+    assert "could not start autopay setup" in resp.json()["detail"]
+
+
+def test_confirm_failure_from_razorpay_returns_ok_false_not_raw_500(app_client, monkeypatch):
+    _mock_full_flow(monkeypatch)
+
+    def _boom(payment_id):
+        raise RuntimeError("simulated Razorpay API failure")
+
+    monkeypatch.setattr(razorpay_client, "fetch_payment", _boom)
+
+    app_client.post("/autopay/setup", json={"name": "T", "email": "t@example.com", "contact": "9812345670"})
+    resp = app_client.post(
+        "/autopay/confirm",
+        json={"razorpay_order_id": "order_route_auth", "razorpay_payment_id": "pay_x", "razorpay_signature": "sig"},
+    )
+    assert resp.status_code == 200  # never a raw 500
+    body = resp.json()
+    assert body["ok"] is False
+    assert "could not confirm autopay setup" in body["error"]
+
+
 def test_revoke_route(app_client, monkeypatch):
     _mock_full_flow(monkeypatch)
     app_client.post("/autopay/setup", json={"name": "T", "email": "t@example.com", "contact": "9812345670"})

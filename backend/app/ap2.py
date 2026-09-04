@@ -1,25 +1,18 @@
 """AP2 (Agent Payments Protocol) mandate handling for the UCP/MCP surface.
 
-This is Google's real, published agentic-commerce spec (ap2-protocol.org), not an invented
-analogy — relevant because Track 01 is literally "AI Growth & Agentic Commerce." Two mandate
-types, exactly as the spec defines them:
+CartMandate — merchant-signed, price-locked cart, created by create_checkout.
+PaymentMandate — caller-signed authorization referencing a CartMandate, verified by
+complete_checkout before any money moves.
 
-  CartMandate    — merchant-signed, price-locked cart. Created by `create_checkout`.
-  PaymentMandate — caller-signed authorization referencing a CartMandate. Submitted to
-                   `complete_checkout`, which verifies both before any money moves.
+Signing is a deterministic hash, not real asymmetric crypto — matches the fidelity of
+Google's own reference codelab; production AP2 uses SD-JWT.
 
-Signing here is a deterministic hash, not real asymmetric cryptography — this matches the
-fidelity of Google's own reference codelab (`merchant_authorization: "mock_merchant_sig_..."`,
-`user_authorization: sha256(mandate_id + cart_reference)`); production AP2 uses SD-JWT.
-Labeled honestly wherever it appears, including in the API responses themselves.
-
-Note this is a DIFFERENT "mandate" concept from app/mandate.py's spend/category cap — an AP2
-PaymentMandate proves *who authorized this specific purchase*; app/mandate.py's check_mandate
-proves *the purchase is within the merchant's configured spend bounds*. Both are enforced,
-independently, on the same request — see complete_checkout below, which re-runs
-app.checkout.propose_and_checkout (spend/category gate + idempotent order creation) only
-after the AP2 mandate pair verifies.
+This is a different "mandate" from app/mandate.py's spend/category cap: PaymentMandate
+proves who authorized the purchase, check_mandate proves it's within budget. Both are
+enforced independently — see complete_checkout, which only calls propose_and_checkout after
+the AP2 pair verifies.
 """
+import datetime
 import hashlib
 import hmac
 import json
@@ -30,11 +23,9 @@ from sqlalchemy.orm import Session
 
 from app import audit, config
 from app.checkout import CheckoutResult, propose_and_checkout
-from app.models import CartMandateRecord
-from app.pricing import InsufficientStockError, UnknownProductError, price_cart, PricedCart
 from app.mandate import MandateState, check_mandate
-from app.models import Mandate, utcnow
-import datetime
+from app.models import CartMandateRecord, Mandate, utcnow
+from app.pricing import InsufficientStockError, PricedCart, UnknownProductError, price_cart
 
 
 class CartMandateError(ValueError):
@@ -46,17 +37,13 @@ class PaymentMandateError(ValueError):
 
 
 def _sign_cart(cart_id: str, total_inr: int) -> str:
-    """Mock merchant signature — a merchant re-derives and compares this, so any tampering
-    with the cart id or total after issuance is detectable, even without real asymmetric
-    crypto. This is exactly the property a CartMandate exists to provide."""
     message = f"{cart_id}:{total_inr}:INR".encode()
     return "mock_merchant_sig_" + hmac.new(config.AP2_MOCK_SIGNING_SECRET.encode(), message, hashlib.sha256).hexdigest()
 
 
 def expected_user_authorization(mandate_id: str, cart_reference: str) -> str:
-    """Matches Google's own reference codelab's demo-fidelity signature:
-    sha256(mandate_id + cart_reference). A real caller (agent or SDK) computes this the same
-    way; we verify by recomputing, not by trusting whatever string is handed to us."""
+    """Matches the reference codelab's demo-fidelity signature: sha256(mandate_id +
+    cart_reference). Verified by recomputing, never trusted from the caller."""
     return hashlib.sha256(f"{mandate_id}{cart_reference}".encode()).hexdigest()
 
 
@@ -87,11 +74,8 @@ class CartMandate:
 
 
 def create_cart_mandate(db: Session, items: list[dict], session_id: str = "ucp") -> CartMandate:
-    """Reprices from the canonical Product table and runs the spend/category mandate check —
-    same deterministic gate the chat agent's propose_cart uses — BEFORE issuing a price lock.
-    A cart that wouldn't be allowed to check out is never issued a CartMandate in the first
-    place, rather than being locked and rejected later at complete_checkout.
-    """
+    """Reprices and mandate-checks before issuing a price lock — a cart that wouldn't be
+    allowed to check out is never locked in the first place."""
     try:
         priced: PricedCart = price_cart(db, items)
     except (UnknownProductError, InsufficientStockError, ValueError) as exc:
@@ -155,12 +139,8 @@ def get_cart_mandate(db: Session, cart_id: str) -> CartMandateRecord:
 
 
 def complete_checkout(db: Session, *, cart_reference: str, payment_mandate: dict) -> CheckoutResult:
-    """Verifies the PaymentMandate against its referenced CartMandate, then — and only
-    then — hands off to app.checkout.propose_and_checkout, which independently re-prices,
-    re-runs the spend/category gate, and idempotently creates the Razorpay order. This means
-    a UCP/AP2-originated purchase goes through the exact same disposal boundary as a chat-
-    originated one; there is no second, weaker path to money movement.
-    """
+    """Verifies the PaymentMandate against its CartMandate, then hands off to
+    propose_and_checkout — the same disposal boundary a chat-originated purchase uses."""
     record = get_cart_mandate(db, cart_reference)
 
     if record.status != "open":
@@ -176,12 +156,6 @@ def complete_checkout(db: Session, *, cart_reference: str, payment_mandate: dict
 
     submitted_total = (payment_mandate.get("total") or {}).get("value")
     if submitted_total != record.total_inr:
-        # Defends the CartMandate's core promise: the price cannot change between issuance
-        # and completion. Whether the drift came from a stale client or a manipulation
-        # attempt, the outcome is the same: refuse, don't guess which one it was — and, same
-        # as the chat agent's injection path, this specific shape of failure (a caller trying
-        # to substitute its own number for the locked one) gets its own audit row, visible on
-        # the dashboard the same way a chat-side discount injection is.
         audit.log(
             db,
             session_id=f"ucp:{cart_reference}",
@@ -211,8 +185,7 @@ def complete_checkout(db: Session, *, cart_reference: str, payment_mandate: dict
         )
         raise PaymentMandateError("payment mandate user_authorization is invalid")
 
-    # Re-verify our own CartMandate signature too — if the record's stored signature doesn't
-    # match what we'd sign for this id/total today, something in storage was tampered with.
+    # Detects storage tampering: re-derive and compare our own signature.
     if not hmac.compare_digest(record.merchant_authorization, _sign_cart(record.id, record.total_inr)):
         raise CartMandateError("cart mandate merchant_authorization failed self-verification")
 

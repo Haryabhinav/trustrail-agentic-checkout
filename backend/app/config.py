@@ -21,13 +21,20 @@ MANDATE_ALLOWED_CATEGORIES = _list_env(
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./trustrail.db")
 
+# Prevents a hung upstream call from blocking a worker thread forever.
+UPSTREAM_REQUEST_TIMEOUT_SECONDS = int(os.getenv("UPSTREAM_REQUEST_TIMEOUT_SECONDS", "15"))
+
 DEMO_GATEWAY_FAILURE_ATTEMPTS = int(os.getenv("DEMO_GATEWAY_FAILURE_ATTEMPTS", "0"))
 
-# UCP / AP2 (Universal Commerce Protocol / Agent Payments Protocol) — Google's real,
-# published agentic-commerce specs, not an invented approximation. See app/ap2.py and
-# app/routes/mcp.py. AP2_MOCK_SIGNING_SECRET signs CartMandates the same way Google's own
-# reference codelab does at this fidelity level: a deterministic hash, not real asymmetric
-# crypto (production AP2 uses SD-JWT) — honestly labeled as such everywhere it's used.
+# No wildcard: a money-moving endpoint reachable from any origin is a CSRF-via-fetch() risk.
+# Browser-enforced only — doesn't protect a direct server-to-server caller.
+ALLOWED_ORIGINS = _list_env("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+
+# /demo/* can move real money or flip shared state with one unauthenticated request; exists
+# to make demo scenarios repeatable on cue. Disable outside of an active demo.
+ENABLE_DEMO_ROUTES = os.getenv("ENABLE_DEMO_ROUTES", "true").strip().lower() not in ("false", "0", "")
+
+# UCP / AP2 (Universal Commerce Protocol / Agent Payments Protocol) — see app/ap2.py.
 UCP_MERCHANT_NAME = os.getenv("UCP_MERCHANT_NAME", "TrustRail Demo Store")
 AP2_MOCK_SIGNING_SECRET = os.getenv("AP2_MOCK_SIGNING_SECRET", "trustrail-demo-mock-signing-secret")
 AP2_CART_MANDATE_TTL_SECONDS = int(os.getenv("AP2_CART_MANDATE_TTL_SECONDS", "300"))

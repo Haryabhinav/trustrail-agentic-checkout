@@ -7,15 +7,13 @@ from app.models import Product
 
 router = APIRouter()
 
-UCP_SPEC_VERSION = "2026-01-15"  # matches Google's published UCP spec version this shape targets
+UCP_SPEC_VERSION = "2026-01-15"
 
 
 @router.get("/.well-known/ucp")
 def ucp_manifest():
-    """Shaped to match Google's real, published UCP manifest format (spec version
-    2026-01-15) — not an invented approximation. See app/mcp.py for the JSON-RPC transport
-    this advertises, and app/ap2.py for the AP2 mandate flow behind `checkout`.
-    """
+    """Matches Google's published UCP manifest format — see app/mcp.py (transport) and
+    app/ap2.py (mandate flow)."""
     return {
         "ucp": {
             "version": UCP_SPEC_VERSION,
@@ -36,9 +34,7 @@ def ucp_manifest():
                 ]
             },
         },
-        # Kept alongside the spec-conformant `ucp` block for convenience — not part of UCP
-        # itself, just a plain REST mirror of the catalog for anything that isn't speaking MCP.
-        "catalog_url": "/catalog",
+        "catalog_url": "/catalog",  # plain REST mirror, for callers not speaking MCP
     }
 
 

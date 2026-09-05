@@ -228,7 +228,7 @@ def propose_and_checkout(
     try:
         link = razorpay_client.create_payment_link(
             amount_paise=priced_cart.total_inr * 100,
-            description=f"TrustRail order {order['id']}",
+            description=f"PayPilot order {order['id']}",
             reference_id=razorpay_receipt(idempotency_key),
         )
     except Exception as exc:  # noqa: BLE001 - order exists; report the link failure, don't crash
@@ -282,7 +282,7 @@ def propose_and_autocharge(
 
     try:
         charge = autopay.charge_via_token(
-            db, amount_inr=priced_cart.total_inr, description=f"TrustRail autopay charge ({session_id})"
+            db, amount_inr=priced_cart.total_inr, description=f"PayPilot autopay charge ({session_id})"
         )
     except autopay.AutopayError as exc:
         audit.update_status(db, pending_row, status="error")

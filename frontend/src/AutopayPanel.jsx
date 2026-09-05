@@ -1,27 +1,8 @@
 import { useEffect, useState } from "react";
+import { Loader2, CreditCard, Zap } from "lucide-react";
 import { useToast } from "./Toast.jsx";
 
-function Spinner() {
-  return (
-    <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-      <path className="opacity-90" d="M22 12a10 10 0 00-10-10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CardIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4">
-      <rect x="2.5" y="5.5" width="19" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M2.5 9.5h19" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-// Razorpay rejects test-mode contact numbers with 4+ repeating digits as a fraud heuristic
-// (confirmed live: "9999999999" gets a hard 400) — catching it client-side saves a round
-// trip and a confusing modal-side failure.
+// Razorpay's fraud heuristic rejects contact numbers with 4+ repeating digits.
 function contactIssue(contact) {
   if (!contact) return null;
   if (!/^\d{10}$/.test(contact)) return "Enter exactly 10 digits";
@@ -62,19 +43,17 @@ export default function AutopayPanel() {
       const setup = await setupRes.json();
       if (!setupRes.ok) throw new Error(setup.detail || "setup failed");
 
-      // Razorpay Checkout.js — this is the one human-authenticated payment that tokenizes
-      // the card. Everything after this is zero-human-interaction (see AutopayPanel's
-      // "Trigger agent purchase" button and app/autopay.py's charge_via_token).
+      // The one human-authenticated payment that tokenizes the card.
       const rzp = new window.Razorpay({
         key: setup.key_id,
         order_id: setup.order_id,
         amount: setup.amount_paise,
         currency: setup.currency,
-        name: "TrustRail",
+        name: "PayPilot",
         description: "Save card for agent autopay (₹1 authorization)",
         recurring: "1",
         prefill: { name: setup.name, email: setup.email, contact: setup.contact },
-        theme: { color: "#6366f1" },
+        theme: { color: "#3366FF" },
         handler: async function (response) {
           const confirmRes = await fetch("/autopay/confirm", {
             method: "POST",
@@ -135,47 +114,41 @@ export default function AutopayPanel() {
   if (!status) return null;
 
   return (
-    <div className="rounded-2xl border border-white/[0.07] bg-gradient-to-br from-slate-900/60 to-slate-900/30 p-4 shadow-xl shadow-black/30 backdrop-blur-sm">
+    <div className="rounded-xl border border-edge bg-surface p-4 shadow-xl shadow-black/30 transition-colors duration-200 hover:border-slate-700">
       <div className="flex items-center gap-2 mb-3">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-500/15 text-violet-300 ring-1 ring-violet-500/25">
-          <CardIcon />
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-rzp/15 text-rzp ring-1 ring-rzp/25">
+          <CreditCard className="h-4 w-4" strokeWidth={1.8} />
         </div>
         <div>
           <h3 className="text-sm font-semibold text-slate-200">Agent autopay</h3>
-          <p className="text-[11px] text-slate-500">Zero-touch purchases after one human-authenticated card save</p>
+          <p className="text-xs text-slate-400">Zero-touch purchases after one human-authenticated card save</p>
         </div>
       </div>
 
       {status.status === "active" ? (
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs text-slate-300">
-            <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          <div className="flex items-center gap-2 rounded-lg border border-edge bg-canvas/40 px-3 py-2 text-xs text-slate-300">
+            <span className="flex h-1.5 w-1.5 rounded-full bg-[#10B981]" />
             {status.card_network} •••• {status.card_last4}
           </div>
           <button
             onClick={triggerAgentPurchase}
             disabled={busy}
-            className="flex items-center gap-1.5 rounded-lg border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-xs font-medium text-emerald-300 transition hover:border-emerald-700 hover:bg-emerald-900/40 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-xs font-medium text-emerald-300 transition-all duration-200 hover:border-emerald-700 hover:bg-emerald-900/40 disabled:opacity-50"
           >
-            {busy ? (
-              <Spinner />
-            ) : (
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-                <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-              </svg>
-            )}
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /> : <Zap className="h-3.5 w-3.5" strokeWidth={1.8} />}
             Trigger agent purchase
           </button>
           <button
             onClick={revoke}
             disabled={busy}
-            className="rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-xs font-medium text-slate-400 transition hover:border-white/[0.15] hover:text-slate-200 disabled:opacity-50"
+            className="rounded-lg border border-edge bg-canvas/40 px-3 py-2 text-xs font-medium text-slate-400 transition-all duration-200 hover:border-slate-600 hover:text-slate-200 disabled:opacity-50"
           >
             Revoke
           </button>
         </div>
       ) : (
-        <form onSubmit={saveCard} className="flex flex-wrap items-start gap-2.5">
+        <form onSubmit={saveCard} className="flex flex-wrap items-end gap-2.5">
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Name</label>
             <input
@@ -183,7 +156,7 @@ export default function AutopayPanel() {
               placeholder="Jane Doe"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="rounded-lg border border-white/[0.08] bg-slate-950/60 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+              className="rounded-lg border border-slate-700 bg-transparent px-3 py-2 text-sm text-slate-50 placeholder-slate-600 outline-none transition-all duration-200 focus:border-rzp focus:ring-2 focus:ring-rzp/20"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -194,18 +167,18 @@ export default function AutopayPanel() {
               placeholder="jane@example.com"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="rounded-lg border border-white/[0.08] bg-slate-950/60 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+              className="rounded-lg border border-slate-700 bg-transparent px-3 py-2 text-sm text-slate-50 placeholder-slate-600 outline-none transition-all duration-200 focus:border-rzp focus:ring-2 focus:ring-rzp/20"
             />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Contact</label>
             <input
               required
-              placeholder="98XXXXXXXX"
+              placeholder="88XXXXXXX"
               value={form.contact}
               onChange={(e) => setForm({ ...form, contact: e.target.value.replace(/\D/g, "").slice(0, 10) })}
-              className={`w-32 rounded-lg border bg-slate-950/60 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 outline-none transition focus:ring-2 ${
-                contactError ? "border-amber-600/60 focus:border-amber-500 focus:ring-amber-500/20" : "border-white/[0.08] focus:border-indigo-500 focus:ring-indigo-500/20"
+              className={`w-32 rounded-lg border bg-transparent px-3 py-2 text-sm text-slate-50 placeholder-slate-600 outline-none transition-all duration-200 focus:ring-2 ${
+                contactError ? "border-amber-600/60 focus:border-amber-500 focus:ring-amber-500/20" : "border-slate-700 focus:border-rzp focus:ring-rzp/20"
               }`}
             />
             {contactError && <span className="text-[10px] leading-tight text-amber-400/90">{contactError}</span>}
@@ -213,9 +186,9 @@ export default function AutopayPanel() {
           <button
             type="submit"
             disabled={busy || Boolean(contactError)}
-            className="flex items-center gap-1.5 self-end rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-rzp px-4 py-2 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-rzp-hover hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
           >
-            {busy && <Spinner />}
+            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} />}
             Save card for autopay (₹1 one-time)
           </button>
         </form>

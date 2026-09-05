@@ -8,7 +8,7 @@ from app import autopay
 from app.db import get_db
 
 router = APIRouter()
-logger = logging.getLogger("trustrail.autopay")
+logger = logging.getLogger("paypilot.autopay")
 
 
 class SetupRequest(BaseModel):

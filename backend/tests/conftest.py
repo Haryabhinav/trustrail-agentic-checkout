@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("RAZORPAY_WEBHOOK_SECRET", "test_webhook_secret")
 os.environ.setdefault("MANDATE_MAX_SPEND_INR", "5000")
 os.environ.setdefault("MANDATE_ALLOWED_CATEGORIES", "electronics,groceries,office-supplies")
-os.environ.setdefault("DATABASE_URL", "sqlite:///./.test_trustrail.db")
+os.environ.setdefault("DATABASE_URL", "sqlite:///./.test_paypilot.db")
 
 import pytest
 from sqlalchemy import create_engine

@@ -19,7 +19,7 @@ MANDATE_ALLOWED_CATEGORIES = _list_env(
     "MANDATE_ALLOWED_CATEGORIES", "electronics,groceries,office-supplies"
 )
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./trustrail.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./paypilot.db")
 
 # Prevents a hung upstream call from blocking a worker thread forever.
 UPSTREAM_REQUEST_TIMEOUT_SECONDS = int(os.getenv("UPSTREAM_REQUEST_TIMEOUT_SECONDS", "15"))
@@ -35,6 +35,6 @@ ALLOWED_ORIGINS = _list_env("ALLOWED_ORIGINS", "http://localhost:5173,http://127
 ENABLE_DEMO_ROUTES = os.getenv("ENABLE_DEMO_ROUTES", "true").strip().lower() not in ("false", "0", "")
 
 # UCP / AP2 (Universal Commerce Protocol / Agent Payments Protocol) — see app/ap2.py.
-UCP_MERCHANT_NAME = os.getenv("UCP_MERCHANT_NAME", "TrustRail Demo Store")
-AP2_MOCK_SIGNING_SECRET = os.getenv("AP2_MOCK_SIGNING_SECRET", "trustrail-demo-mock-signing-secret")
+UCP_MERCHANT_NAME = os.getenv("UCP_MERCHANT_NAME", "PayPilot Demo Store")
+AP2_MOCK_SIGNING_SECRET = os.getenv("AP2_MOCK_SIGNING_SECRET", "paypilot-demo-mock-signing-secret")
 AP2_CART_MANDATE_TTL_SECONDS = int(os.getenv("AP2_CART_MANDATE_TTL_SECONDS", "300"))

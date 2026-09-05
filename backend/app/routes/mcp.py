@@ -8,7 +8,7 @@ from app import mcp
 from app.db import get_db
 
 router = APIRouter()
-logger = logging.getLogger("trustrail.mcp")
+logger = logging.getLogger("paypilot.mcp")
 
 ERR_INTERNAL = -32603  # JSON-RPC 2.0 reserved: "Internal error"
 

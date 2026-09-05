@@ -3,13 +3,115 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TrustRail — Agentic Commerce Gateway</title>
+    <title>PayPilot — Agentic Commerce Gateway</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              canvas: "#0B0F19",
+              surface: "#131927",
+              edge: "#1E293B",
+              rzp: { DEFAULT: "#3366FF", hover: "#2952CC" },
+            },
+          },
+        },
+      };
+    </script>
     <!-- Razorpay's Checkout.js — the only Razorpay product that supports the token/recurring
          save-card flow (Payment Links do not accept a pre-configured token-enabled order). -->
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+      }
+      .font-mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace !important;
+      }
+      body {
+        background: radial-gradient(1200px 600px at 15% -10%, rgba(51, 102, 255, 0.16), transparent 60%),
+          radial-gradient(1000px 500px at 100% 0%, rgba(51, 102, 255, 0.06), transparent 55%), #0b0f19;
+      }
+      ::selection {
+        background: rgba(51, 102, 255, 0.35);
+      }
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.25);
+        border-radius: 999px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(148, 163, 184, 0.4);
+      }
+      @keyframes fade-in {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-fade-in {
+        animation: fade-in 0.25s ease-out;
+      }
+      @keyframes pulse-dot {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.35;
+        }
+      }
+      .animate-pulse-dot {
+        animation: pulse-dot 1.6s ease-in-out infinite;
+      }
+      @keyframes rise-in {
+        from {
+          opacity: 0;
+          transform: translateY(16px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-rise-in {
+        animation: rise-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      @keyframes pulse-slow {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      .animate-pulse-slow {
+        animation: pulse-slow 2.4s ease-in-out infinite;
+      }
+    </style>
   </head>
-  <body class="bg-slate-950 text-slate-100">
+  <body class="text-slate-100 antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

@@ -28,7 +28,7 @@ def main():
 
     print("Creating a payment link for that order ...")
     link = razorpay_client.create_payment_link(
-        amount_paise=1000, description="TrustRail smoke test", reference_id="smoke-test-1"
+        amount_paise=1000, description="PayPilot smoke test", reference_id="smoke-test-1"
     )
     print(f"  payment link: {link['short_url']}")
     print()

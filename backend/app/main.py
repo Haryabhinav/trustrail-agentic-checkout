@@ -10,7 +10,7 @@ from app.routes import audit, autopay, chat, mcp, stats, ucp, webhooks
 from app.seed import seed_if_empty
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger("trustrail")
+logger = logging.getLogger("paypilot")
 
 
 @asynccontextmanager
@@ -31,7 +31,7 @@ def create_app(*, enable_demo_routes: bool | None = None) -> FastAPI:
         enable_demo_routes = config.ENABLE_DEMO_ROUTES
 
     app = FastAPI(
-        title="TrustRail",
+        title="PayPilot",
         description="Deterministic checkout gateway for AI shopping agents",
         lifespan=lifespan,
     )

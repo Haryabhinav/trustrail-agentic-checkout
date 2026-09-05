@@ -11,18 +11,18 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       MANDATE_MAX_SPEND_INR: ${MANDATE_MAX_SPEND_INR:-5000}
       MANDATE_ALLOWED_CATEGORIES: ${MANDATE_ALLOWED_CATEGORIES:-electronics,groceries,office-supplies}
-      DATABASE_URL: sqlite:////data/trustrail.db
+      DATABASE_URL: sqlite:////data/paypilot.db
       # Defaults to the same publicly-known demo value config.py itself falls back to —
       # deliberately NOT an empty string here, since an unset compose var would otherwise
       # override config.py's real default with "" (a worse, empty secret). Anyone reading
       # the source can forge a CartMandate signature against this default either way; set a
       # real value in .env for anything beyond local demo use.
-      AP2_MOCK_SIGNING_SECRET: ${AP2_MOCK_SIGNING_SECRET:-trustrail-demo-mock-signing-secret}
-      UCP_MERCHANT_NAME: ${UCP_MERCHANT_NAME:-TrustRail Demo Store}
+      AP2_MOCK_SIGNING_SECRET: ${AP2_MOCK_SIGNING_SECRET:-paypilot-demo-mock-signing-secret}
+      UCP_MERCHANT_NAME: ${UCP_MERCHANT_NAME:-PayPilot Demo Store}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
       ENABLE_DEMO_ROUTES: ${ENABLE_DEMO_ROUTES:-true}
     volumes:
-      - trustrail_db:/data
+      - paypilot_db:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 5s
@@ -45,4 +45,4 @@ services:
       retries: 5
 
 volumes:
-  trustrail_db:
+  paypilot_db:

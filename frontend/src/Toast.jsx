@@ -5,7 +5,7 @@ const ToastContext = createContext(null);
 const TONE_STYLES = {
   success: { ring: "ring-emerald-500/30", icon: "bg-emerald-500/15 text-emerald-300", bar: "bg-emerald-400" },
   error: { ring: "ring-red-500/30", icon: "bg-red-500/15 text-red-300", bar: "bg-red-400" },
-  info: { ring: "ring-indigo-500/30", icon: "bg-indigo-500/15 text-indigo-300", bar: "bg-indigo-400" },
+  info: { ring: "ring-rzp/30", icon: "bg-rzp/15 text-blue-300", bar: "bg-rzp" },
 };
 
 const TONE_ICON = {
@@ -31,7 +31,7 @@ function ToastItem({ toast, onDismiss }) {
   return (
     <div
       role="status"
-      className={`animate-fade-in pointer-events-auto relative w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-white/[0.08] bg-slate-900/95 p-3.5 pr-8 shadow-2xl shadow-black/50 ring-1 backdrop-blur-md ${style.ring}`}
+      className={`animate-fade-in pointer-events-auto relative w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-edge bg-surface p-3.5 pr-8 shadow-2xl shadow-black/50 ring-1 ${style.ring}`}
     >
       <span className={`absolute left-0 top-0 bottom-0 w-[3px] ${style.bar}`} />
       <div className="flex items-start gap-2.5">
@@ -41,7 +41,7 @@ function ToastItem({ toast, onDismiss }) {
           </svg>
         </div>
         <div className="min-w-0 pt-0.5">
-          {toast.title && <p className="text-[13px] font-semibold text-slate-100">{toast.title}</p>}
+          {toast.title && <p className="text-[13px] font-semibold text-slate-50">{toast.title}</p>}
           {toast.message && <p className="mt-0.5 text-[12px] leading-relaxed text-slate-400">{toast.message}</p>}
         </div>
       </div>

@@ -1,4 +1,4 @@
-# TrustRail
+# PayPilot
 
 A deterministic checkout gateway that makes a Razorpay merchant natively transactable by AI
 shopping agents — the LLM proposes carts, the server independently re-prices, mandate-checks,

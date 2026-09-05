@@ -2,7 +2,7 @@
 *.db
 *.db-wal
 *.db-shm
-.test_trustrail.db*
+.test_paypilot.db*
 
 backend/.venv/
 backend/__pycache__/
